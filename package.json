@@ -1,0 +1,23 @@
+{
+  "name": "smart-contracts",
+  "version": "1.0.0",
+  "description": "Hardhat development environment for EVM-compatible smart contracts.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "hardhat build",
+    "clean": "hardhat clean",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:ts": "hardhat test nodejs",
+    "node": "hardhat node",
+    "deploy:counter": "hardhat run scripts/deploy-counter.ts"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.4",
+    "@types/node": "^25.6.0",
+    "hardhat": "^3.4.4",
+    "typescript": "^6.0.3",
+    "viem": "^2.48.8"
+  }
+}
