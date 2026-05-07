@@ -78,6 +78,20 @@ describe("BlockLimitSwap", function () {
     assert.equal(await token0.read.balanceOf([swapper.address]), 0n);
   });
 
+  it("only allows the owner to swap", async function () {
+    const { other, token0, swapper, pool } = await networkHelpers.loadFixture(deployFixture);
+    const targetBlock = await nextBlockNumber();
+
+    await viem.assertions.revertWithCustomError(
+      swapper.write.swap(
+        [token0.address, pool.address, 1n, tokenAmount("1"), targetBlock, ALWAYS_EXECUTE],
+        { account: other.account }
+      ),
+      swapper,
+      "OwnableUnauthorized"
+    );
+  });
+
   it("swaps token1 for token0", async function () {
     const { caller, token0, token1, swapper, pool } = await networkHelpers.loadFixture(deployFixture);
     const actualAmountIn = tokenAmount("3");
@@ -149,6 +163,33 @@ describe("BlockLimitSwap", function () {
       swapper.write.swap([token0.address, pool.address, 1n, tokenAmount("10"), targetBlock, 101n]),
       swapper,
       "SwapExecuted"
+    );
+  });
+
+  it("allows the owner to recover stranded tokens", async function () {
+    const { caller, other, token0, swapper } = await networkHelpers.loadFixture(deployFixture);
+    const strandedAmount = tokenAmount("2");
+
+    await token0.write.transfer([swapper.address, strandedAmount]);
+
+    await viem.assertions.emitWithArgs(
+      swapper.write.recoverToken([token0.address, other.account.address, strandedAmount]),
+      swapper,
+      "TokenRecovered",
+      [getAddress(caller.account.address), getAddress(token0.address), getAddress(other.account.address), strandedAmount]
+    );
+
+    assert.equal(await token0.read.balanceOf([swapper.address]), 0n);
+    assert.equal(await token0.read.balanceOf([other.account.address]), strandedAmount);
+  });
+
+  it("only allows the owner to recover stranded tokens", async function () {
+    const { other, token0, swapper } = await networkHelpers.loadFixture(deployFixture);
+
+    await viem.assertions.revertWithCustomError(
+      swapper.write.recoverToken([token0.address, other.account.address, tokenAmount("1")], { account: other.account }),
+      swapper,
+      "OwnableUnauthorized"
     );
   });
 });

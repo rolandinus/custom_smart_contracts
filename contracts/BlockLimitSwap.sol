@@ -26,6 +26,8 @@ contract BlockLimitSwap {
         int256 amount1;
     }
 
+    address public immutable owner;
+
     address private activePool;
     address private activeTokenIn;
     bool private activeZeroForOne;
@@ -38,14 +40,27 @@ contract BlockLimitSwap {
         uint256 amountIn,
         uint256 amountOut
     );
+    event TokenRecovered(address indexed owner, address indexed token, address indexed to, uint256 amount);
 
     error CallbackTokenMismatch();
     error InvalidAmountIn();
+    error OwnableUnauthorized(address caller);
     error RandomGateNotPassed(uint256 executionPercentage);
     error SafeTransferFailed();
     error TokenNotInPool(address tokenIn, address pool);
     error UnauthorizedCallback(address caller);
     error WrongBlock(uint256 currentBlock, uint256 targetBlock);
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) {
+            revert OwnableUnauthorized(msg.sender);
+        }
+        _;
+    }
 
     function swap(
         address tokenIn,
@@ -54,7 +69,7 @@ contract BlockLimitSwap {
         uint256 maxAmountIn,
         uint256 targetBlock,
         uint256 executionPercentage
-    ) external returns (uint256 amountIn, uint256 amountOut) {
+    ) external onlyOwner returns (uint256 amountIn, uint256 amountOut) {
         if (block.number != targetBlock) {
             revert WrongBlock(block.number, targetBlock);
         }
@@ -106,6 +121,11 @@ contract BlockLimitSwap {
         }
 
         emit SwapExecuted(msg.sender, tokenIn, poolPairAddress, amountIn, amountOut);
+    }
+
+    function recoverToken(address token, address to, uint256 amount) external onlyOwner {
+        _safeTransfer(token, to, amount);
+        emit TokenRecovered(msg.sender, token, to, amount);
     }
 
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external {
