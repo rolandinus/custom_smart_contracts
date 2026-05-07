@@ -9,6 +9,7 @@
     "clean": "hardhat clean",
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "test:fork": "hardhat test nodejs test/BlockLimitSwapFork.ts",
     "test:ts": "hardhat test nodejs",
     "node": "hardhat node",
     "deploy:counter": "hardhat run scripts/deploy-counter.ts"

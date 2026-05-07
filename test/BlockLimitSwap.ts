@@ -5,6 +5,7 @@ import { encodeAbiParameters, getAddress, parseUnits } from "viem";
 
 const { viem, networkHelpers } = await network.create();
 const tokenAmount = (value: string) => parseUnits(value, 18);
+const ALWAYS_EXECUTE = 101n;
 
 async function nextBlockNumber() {
   const publicClient = await viem.getPublicClient();
@@ -43,7 +44,8 @@ describe("BlockLimitSwap", function () {
         pool.address,
         123n,
         tokenAmount("10"),
-        targetBlock + 1n
+        targetBlock + 1n,
+        ALWAYS_EXECUTE
       ]),
       swapper,
       "WrongBlock"
@@ -61,7 +63,7 @@ describe("BlockLimitSwap", function () {
     const targetBlock = await nextBlockNumber();
 
     await viem.assertions.emitWithArgs(
-      swapper.write.swap([token0.address, pool.address, sqrtPriceLimitX96, maxAmountIn, targetBlock]),
+      swapper.write.swap([token0.address, pool.address, sqrtPriceLimitX96, maxAmountIn, targetBlock, ALWAYS_EXECUTE]),
       swapper,
       "SwapExecuted",
       [getAddress(caller.account.address), getAddress(token0.address), getAddress(pool.address), actualAmountIn, amountOut]
@@ -84,7 +86,7 @@ describe("BlockLimitSwap", function () {
     await pool.write.setNextSwap([actualAmountIn, amountOut]);
     const targetBlock = await nextBlockNumber();
     await viem.assertions.emitWithArgs(
-      swapper.write.swap([token1.address, pool.address, 99n, tokenAmount("7"), targetBlock]),
+      swapper.write.swap([token1.address, pool.address, 99n, tokenAmount("7"), targetBlock, ALWAYS_EXECUTE]),
       swapper,
       "SwapExecuted",
       [getAddress(caller.account.address), getAddress(token1.address), getAddress(pool.address), actualAmountIn, amountOut]
@@ -102,7 +104,7 @@ describe("BlockLimitSwap", function () {
     const targetBlock = await nextBlockNumber();
 
     await viem.assertions.revertWithCustomError(
-      swapper.write.swap([outsideToken.address, pool.address, 1n, tokenAmount("1"), targetBlock]),
+      swapper.write.swap([outsideToken.address, pool.address, 1n, tokenAmount("1"), targetBlock, ALWAYS_EXECUTE]),
       swapper,
       "TokenNotInPool"
     );
@@ -117,6 +119,36 @@ describe("BlockLimitSwap", function () {
       swapper.write.uniswapV3SwapCallback([1n, -1n, encodeAbiParameters([{ type: "address" }], [pool.address])]),
       swapper,
       "UnauthorizedCallback"
+    );
+  });
+
+  it("reverts before transferring tokens when the random execution percentage is zero", async function () {
+    const { caller, token0, swapper, pool } = await networkHelpers.loadFixture(deployFixture);
+    const targetBlock = await nextBlockNumber();
+
+    await viem.assertions.revertWithCustomError(
+      swapper.write.swap([token0.address, pool.address, 1n, tokenAmount("10"), targetBlock, 0n]),
+      swapper,
+      "RandomGateNotPassed"
+    );
+
+    assert.equal(await token0.read.balanceOf([caller.account.address]), tokenAmount("100"));
+    assert.equal(await token0.read.balanceOf([swapper.address]), 0n);
+    assert.equal(await pool.read.lastAmountSpecified(), 0n);
+  });
+
+  it("always executes when the random execution percentage is greater than 100", async function () {
+    const { token0, swapper, pool } = await networkHelpers.loadFixture(deployFixture);
+    const actualAmountIn = tokenAmount("1");
+    const amountOut = tokenAmount("2");
+
+    await pool.write.setNextSwap([actualAmountIn, amountOut]);
+    const targetBlock = await nextBlockNumber();
+
+    await viem.assertions.emit(
+      swapper.write.swap([token0.address, pool.address, 1n, tokenAmount("10"), targetBlock, 101n]),
+      swapper,
+      "SwapExecuted"
     );
   });
 });

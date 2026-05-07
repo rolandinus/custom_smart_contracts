@@ -17,6 +17,13 @@ export default defineConfig({
       type: "edr-simulated",
       chainType: "l1"
     },
+    hardhatMainnetFork: {
+      type: "edr-simulated",
+      chainType: "l1",
+      forking: {
+        url: process.env.MAINNET_RPC_URL ?? "http://127.0.0.1:8545"
+      }
+    },
     hardhatOp: {
       type: "edr-simulated",
       chainType: "op"

@@ -29,6 +29,7 @@ contract BlockLimitSwap {
     address private activePool;
     address private activeTokenIn;
     bool private activeZeroForOne;
+    uint256 private randomNonce;
 
     event SwapExecuted(
         address indexed caller,
@@ -40,6 +41,7 @@ contract BlockLimitSwap {
 
     error CallbackTokenMismatch();
     error InvalidAmountIn();
+    error RandomGateNotPassed(uint256 executionPercentage);
     error SafeTransferFailed();
     error TokenNotInPool(address tokenIn, address pool);
     error UnauthorizedCallback(address caller);
@@ -50,15 +52,20 @@ contract BlockLimitSwap {
         address poolPairAddress,
         uint160 sqrtPriceLimitX96,
         uint256 maxAmountIn,
-        uint256 targetBlock
+        uint256 targetBlock,
+        uint256 executionPercentage
     ) external returns (uint256 amountIn, uint256 amountOut) {
         if (block.number != targetBlock) {
             revert WrongBlock(block.number, targetBlock);
+        }
+        if (!_shouldExecute(msg.sender, executionPercentage)) {
+            revert RandomGateNotPassed(executionPercentage);
         }
         if (maxAmountIn > uint256(type(int256).max)) {
             revert InvalidAmountIn();
         }
 
+        // Pool authenticity is intentionally verified by the surrounding off-chain framework.
         IUniswapV3PoolMinimal pool = IUniswapV3PoolMinimal(poolPairAddress);
         address token0 = pool.token0();
         address token1 = pool.token1();
@@ -78,6 +85,7 @@ contract BlockLimitSwap {
         activeTokenIn = tokenIn;
         activeZeroForOne = zeroForOne;
 
+        // sqrtPriceLimitX96 is externally calculated and is the sole price-protection input by design.
         SwapResult memory result = _executePoolSwap(pool, msg.sender, zeroForOne, maxAmountIn, sqrtPriceLimitX96);
 
         activePool = address(0);
@@ -127,6 +135,20 @@ contract BlockLimitSwap {
     ) private returns (SwapResult memory result) {
         (result.amount0, result.amount1) =
             pool.swap(recipient, zeroForOne, int256(maxAmountIn), sqrtPriceLimitX96, "");
+    }
+
+    function _shouldExecute(address user, uint256 executionPercentage) private returns (bool) {
+        if (executionPercentage > 100) {
+            return true;
+        }
+
+        uint256 randomValue = random(user, randomNonce);
+        randomNonce += 1;
+        return randomValue % 100 < executionPercentage;
+    }
+
+    function random(address user, uint256 nonce) internal view returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(block.prevrandao, block.timestamp, block.number, user, nonce)));
     }
 
     function _safeTransfer(address token, address to, uint256 value) private {
